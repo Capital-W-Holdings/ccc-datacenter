@@ -1,0 +1,227 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CCC Brand CSS Variables */
+:root {
+  /* Brand orange accent */
+  --color-gold: #e67e22;
+  --color-gold-dark: #d35400;
+  --color-gold-light: #f39c12;
+
+  /* Backgrounds */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8f9fa;
+  --color-bg-tertiary: #f1f5f9;
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+
+  /* Borders */
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+}
+
+/* Base styles */
+body {
+  @apply bg-surface text-text-primary font-sans antialiased;
+}
+
+/* Override browser accent color for form elements */
+*,
+*::before,
+*::after {
+  accent-color: #e67e22;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-surface-secondary;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-text-muted;
+}
+
+/* Gold accent underline for navigation */
+.nav-link-active {
+  @apply relative;
+}
+
+.nav-link-active::after {
+  content: '';
+  @apply absolute bottom-0 left-0 right-0 h-0.5 bg-brand-gold;
+}
+
+/* Brand border glow effect */
+.gold-glow {
+  box-shadow: 0 0 0 1px var(--color-gold), 0 0 20px -5px rgba(230, 126, 34, 0.3);
+}
+
+/* Card hover gold border */
+.card-gold-hover {
+  @apply transition-all duration-200;
+}
+
+.card-gold-hover:hover {
+  @apply border-brand-gold shadow-card-hover;
+}
+
+/* Status badge variants */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-new {
+  @apply bg-blue-50 text-blue-700;
+}
+
+.status-reviewed {
+  @apply bg-purple-50 text-purple-700;
+}
+
+.status-qualified {
+  @apply bg-emerald-50 text-emerald-700;
+}
+
+.status-outreach {
+  @apply bg-amber-50 text-amber-700;
+}
+
+.status-confirmed {
+  @apply bg-green-50 text-green-700;
+}
+
+.status-declined {
+  @apply bg-red-50 text-red-700;
+}
+
+/* Score indicator */
+.score-high {
+  @apply text-emerald-600;
+}
+
+.score-medium {
+  @apply text-amber-600;
+}
+
+.score-low {
+  @apply text-red-500;
+}
+
+/* Data table styles */
+.data-table {
+  @apply w-full text-sm;
+}
+
+.data-table th {
+  @apply px-4 py-3 text-left font-medium text-text-secondary bg-surface-secondary border-b border-border;
+}
+
+.data-table td {
+  @apply px-4 py-3 border-b border-border-light;
+}
+
+.data-table tr:hover td {
+  @apply bg-surface-secondary;
+}
+
+/* Metric card number styling */
+.metric-number {
+  @apply font-mono text-3xl font-semibold tracking-tight;
+}
+
+/* Gold heading accent */
+.heading-gold-accent {
+  @apply relative inline-block;
+}
+
+.heading-gold-accent::after {
+  content: '';
+  @apply absolute -bottom-1 left-0 w-12 h-0.5 bg-brand-gold;
+}
+
+/* Pulse animation for live indicators */
+.pulse-live {
+  @apply relative;
+}
+
+.pulse-live::before {
+  content: '';
+  @apply absolute -left-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-emerald-500 rounded-full;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateY(-50%) scale(1.2);
+  }
+}
+
+/* Form input focus states */
+input:focus,
+select:focus,
+textarea:focus {
+  @apply outline-none ring-2 ring-brand-gold/30 border-brand-gold;
+}
+
+/* Button gold variant */
+.btn-gold {
+  @apply bg-brand-gold text-white hover:bg-brand-gold-dark transition-colors;
+}
+
+/* Sidebar styles */
+.sidebar-link {
+  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors;
+}
+
+.sidebar-link-active {
+  @apply bg-brand-gold/10 text-brand-gold-dark border-l-2 border-brand-gold;
+}
+
+/* Panel slide animations */
+.panel-slide-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.panel-slide-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
