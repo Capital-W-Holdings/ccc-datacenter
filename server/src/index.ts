@@ -129,8 +129,10 @@ app.get('/api/debug/env', (_req, res) => {
     SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
     REDIS_URL: !!process.env.REDIS_URL,
     APP_SECRET: !!process.env.APP_SECRET,
+    BRAVE_SEARCH_API_KEY: !!process.env.BRAVE_SEARCH_API_KEY,
     CORS_ORIGIN: process.env.CORS_ORIGIN || 'not set',
     NODE_ENV: process.env.NODE_ENV || 'not set',
+    workersEnabled: workersStarted,
   })
 })
 
