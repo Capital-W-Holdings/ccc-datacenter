@@ -94,6 +94,19 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
+// Debug endpoint - shows which env vars are configured (not values)
+app.get('/api/debug/env', (_req, res) => {
+  res.json({
+    SUPABASE_URL: !!process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_KEY: !!process.env.SUPABASE_SERVICE_KEY,
+    SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+    REDIS_URL: !!process.env.REDIS_URL,
+    APP_SECRET: !!process.env.APP_SECRET,
+    CORS_ORIGIN: process.env.CORS_ORIGIN || 'not set',
+    NODE_ENV: process.env.NODE_ENV || 'not set',
+  })
+})
+
 // ===========================
 // PROTECTED ROUTES
 // ===========================
