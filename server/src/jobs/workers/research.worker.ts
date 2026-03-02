@@ -555,11 +555,31 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
     let insertedCount = 0
     if (newProspects.length > 0) {
       logger.info({ jobId, count: newProspects.length }, 'Attempting to insert prospects')
-      logger.info({ sample: newProspects.slice(0, 2) }, 'Sample prospects to insert')
+
+      // Clean prospects - remove fields that don't exist in the database schema
+      const cleanedProspects = newProspects.map(p => ({
+        first_name: p.first_name,
+        last_name: p.last_name,
+        full_name: p.full_name,
+        title: p.title,
+        company: p.company,
+        email: p.email,
+        linkedin_url: p.linkedin_url,
+        location_city: p.location_city,
+        location_state: p.location_state,
+        location_country: p.location_country || 'US',
+        status: p.status || 'New',
+        ccc_verticals: p.ccc_verticals || [],
+        target_roles: p.target_roles || [],
+        relevance_score: p.relevance_score || 0,
+        ai_summary: p.ai_summary,
+      }))
+
+      logger.info({ sample: cleanedProspects.slice(0, 2) }, 'Sample prospects to insert')
 
       const { data: inserted, error } = await supabase
         .from('prospects')
-        .insert(newProspects)
+        .insert(cleanedProspects)
         .select()
 
       if (error) {
