@@ -52,7 +52,8 @@ export interface JobProgressData {
   message?: string
   progress?: number
   urlsFound?: number
-  prospectsFound?: number
+  prospectsFound?: number      // New prospects (after dedup)
+  totalExtracted?: number      // Total found before dedup
   emailsFound?: number
   verifiedCount?: number
   duplicatesSkipped?: number

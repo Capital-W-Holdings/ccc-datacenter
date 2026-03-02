@@ -567,11 +567,22 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
 
     await job.updateProgress(100)
 
-    // Complete
+    // Log detailed results
+    logger.info({
+      jobId,
+      extractedFromPages: allProspects.length,
+      afterBatchDedup: batchProspects.length,
+      newProspects: newProspects.length,
+      duplicates: duplicateCount,
+      inserted: insertedCount,
+    }, 'Research job results breakdown')
+
+    // Complete - show both total found and new
+    const totalExtracted = batchProspects.length
     const completeMessage = insertedCount > 0
       ? `Found ${insertedCount} new prospects from ${pageContents.length} sources!${duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : ''}`
       : duplicateCount > 0
-        ? `All ${duplicateCount} prospects found were already in your database.`
+        ? `Found ${totalExtracted} prospects but all were already in your database.`
         : 'No matching prospects found. Try broader criteria.'
 
     await emitProgress(jobId, {
@@ -579,6 +590,7 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
       message: completeMessage,
       urlsFound: uniqueUrls.length,
       prospectsFound: insertedCount,
+      totalExtracted: totalExtracted,  // Total found before dedup
       duplicatesSkipped: duplicateCount,
       progress: 100,
     }, job)

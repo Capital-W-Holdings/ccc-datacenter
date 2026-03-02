@@ -18,7 +18,8 @@ interface ResearchProgress {
   stage: 'understanding' | 'searching' | 'analyzing' | 'scraping' | 'extracting' | 'enriching' | 'complete'
   message: string
   urlsFound?: number
-  prospectsFound?: number
+  prospectsFound?: number       // New prospects (after dedup)
+  totalExtracted?: number       // Total found before dedup
   emailsFound?: number
   verifiedCount?: number
   duplicatesSkipped?: number
@@ -276,6 +277,7 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
                 message,
                 urlsFound: progressObj?.urlsFound,
                 prospectsFound: progressObj?.prospectsFound,
+                totalExtracted: progressObj?.totalExtracted,
                 emailsFound: progressObj?.emailsFound,
                 verifiedCount: progressObj?.verifiedCount,
                 duplicatesSkipped: progressObj?.duplicatesSkipped,
@@ -719,7 +721,7 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
               </h3>
               <p className="text-sm text-text-secondary mb-6">{progress.message}</p>
 
-              {(progress.urlsFound || progress.prospectsFound) && (
+              {(progress.urlsFound || progress.prospectsFound !== undefined || progress.totalExtracted) && (
                 <div className="flex gap-8 mb-6">
                   {progress.urlsFound && (
                     <div className="text-center">
@@ -729,13 +731,43 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
                       <div className="text-xs text-text-muted">Sources Analyzed</div>
                     </div>
                   )}
-                  {progress.prospectsFound !== undefined && (
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-brand-gold">
-                        {progress.prospectsFound}
+                  {/* Show total extracted during progress, or both at completion */}
+                  {progress.stage === 'complete' ? (
+                    <>
+                      {progress.totalExtracted !== undefined && progress.totalExtracted > 0 && (
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-text-secondary">
+                            {progress.totalExtracted}
+                          </div>
+                          <div className="text-xs text-text-muted">Total Found</div>
+                        </div>
+                      )}
+                      {progress.prospectsFound !== undefined && (
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-brand-gold">
+                            {progress.prospectsFound}
+                          </div>
+                          <div className="text-xs text-text-muted">New Prospects</div>
+                        </div>
+                      )}
+                      {progress.duplicatesSkipped !== undefined && progress.duplicatesSkipped > 0 && (
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-text-muted">
+                            {progress.duplicatesSkipped}
+                          </div>
+                          <div className="text-xs text-text-muted">Duplicates</div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    progress.prospectsFound !== undefined && (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-brand-gold">
+                          {progress.prospectsFound}
+                        </div>
+                        <div className="text-xs text-text-muted">Prospects Found</div>
                       </div>
-                      <div className="text-xs text-text-muted">Prospects Found</div>
-                    </div>
+                    )
                   )}
                 </div>
               )}
