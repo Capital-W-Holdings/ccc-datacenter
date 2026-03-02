@@ -40,6 +40,14 @@ router.post('/ai', validateBody(aiResearchSchema), async (req, res, next) => {
       })
     }
 
+    // Check for Brave Search API key
+    if (!process.env.BRAVE_SEARCH_API_KEY) {
+      return res.status(400).json({
+        success: false,
+        error: 'Brave Search API key not configured. Please add BRAVE_SEARCH_API_KEY to your environment.',
+      })
+    }
+
     // Add job to queue
     await addResearchJob(jobId, {
       query,

@@ -193,8 +193,18 @@ export interface AIResearchStatus {
   status: string // BullMQ state: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed'
   progress: number | AIResearchJobProgress // Can be number (0-100) or object with stage details
   result?: {
+    // Direct result format
     savedCount?: number
     prospectIds?: string[]
+    prospectsFound?: number
+    // Nested result format (from job.returnvalue)
+    success?: boolean
+    data?: {
+      savedCount?: number
+      prospectIds?: string[]
+      prospectsFound?: number
+      pagesScraped?: number
+    }
   }
 }
 

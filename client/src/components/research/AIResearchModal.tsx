@@ -162,7 +162,13 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
       })
 
       // Also poll for status as fallback (WebSocket can be unreliable)
+      let pollCount = 0
+      const maxPollsBeforeWarning = 15 // ~30 seconds
+      const maxPollsBeforeError = 30 // ~60 seconds
+
       const pollInterval = setInterval(async () => {
+        pollCount++
+
         try {
           const statusResponse = await researchApi.getAIResearchStatus(jobId)
           if (statusResponse.data) {
@@ -179,8 +185,21 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
             if (state === 'waiting' || state === 'delayed') {
               // Job is queued, waiting to start
               stage = 'understanding'
-              message = 'Queued, waiting to start...'
+              if (pollCount > maxPollsBeforeWarning) {
+                message = 'Job queued but workers may not be running. Check server logs.'
+              } else {
+                message = 'Queued, waiting to start...'
+              }
               setProgress({ stage, message })
+
+              // If stuck too long, show error
+              if (pollCount >= maxPollsBeforeError) {
+                clearInterval(pollInterval)
+                cleanup()
+                toast.error('Research job timed out. Workers may not be running - check Redis connection.')
+                setProgress(null)
+                return
+              }
             } else if (state === 'active') {
               if (progressData?.stage) {
                 stage = progressData.stage as ResearchProgress['stage']
@@ -224,6 +243,13 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
           }
         } catch (err) {
           console.error('[Research] Polling error:', err)
+          // If we've been polling a while and keep getting errors, give up
+          if (pollCount >= maxPollsBeforeError) {
+            clearInterval(pollInterval)
+            cleanup()
+            toast.error('Failed to get research status. Check server connection.')
+            setProgress(null)
+          }
           // Continue polling - might be a temporary network issue
         }
       }, 2000)
