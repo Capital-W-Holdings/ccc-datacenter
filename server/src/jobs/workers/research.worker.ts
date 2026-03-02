@@ -39,12 +39,30 @@ interface Prospect {
 }
 
 /**
- * Emit progress to WebSocket clients
+ * Emit progress to WebSocket clients AND store in job data for polling
  */
-function emitProgress(jobId: string, data: Record<string, unknown>) {
+async function emitProgress(
+  jobId: string,
+  data: Record<string, unknown>,
+  job?: Job<ResearchJobData>
+) {
+  // Emit via WebSocket for real-time updates
   const io = getIO()
   if (io) {
     io.emit(`research:${jobId}`, data)
+  }
+
+  // Also store in job data so polling can access rich progress
+  if (job) {
+    try {
+      await job.updateData({
+        ...job.data,
+        lastProgress: data,
+      })
+    } catch (err) {
+      // Don't fail the job if progress update fails
+      logger.debug({ jobId, error: err }, 'Failed to update job progress data')
+    }
   }
 }
 
@@ -226,11 +244,11 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<JobResult>
 
   try {
     // Stage 1: Understanding & generating searches
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'understanding',
       message: 'Analyzing your research criteria...',
       progress: 5,
-    })
+    }, job)
 
     // Calculate how many queries and results per query we need based on maxUrls
     // More sources = more queries with more results each
@@ -243,23 +261,23 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<JobResult>
     await job.updateProgress(10)
 
     // Stage 2: Web Search
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'searching',
       message: `Searching the web (${searchQueries.length} queries)...`,
       progress: 15,
-    })
+    }, job)
 
     const allResults: BraveSearchResult[] = []
     for (let i = 0; i < searchQueries.length; i++) {
       const results = await braveSearch(searchQueries[i], resultsPerQuery)
       allResults.push(...results)
 
-      emitProgress(jobId, {
+      await emitProgress(jobId, {
         stage: 'searching',
         message: `Searched ${i + 1}/${searchQueries.length} queries (${allResults.length} sources found)...`,
         urlsFound: allResults.length,
         progress: 15 + (i / searchQueries.length) * 15,
-      })
+      }, job)
 
       // Rate limit: 1 request per second for Brave API
       await new Promise(r => setTimeout(r, 1000))
@@ -272,12 +290,12 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<JobResult>
     await job.updateProgress(30)
 
     // Stage 3: Scraping
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'scraping',
       message: `Extracting data from ${uniqueUrls.length} sources...`,
       urlsFound: uniqueUrls.length,
       progress: 35,
-    })
+    }, job)
 
     const pageContents: { url: string; content: string }[] = []
     for (let i = 0; i < uniqueUrls.length; i++) {
@@ -286,24 +304,24 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<JobResult>
         pageContents.push({ url: uniqueUrls[i], content })
       }
 
-      emitProgress(jobId, {
+      await emitProgress(jobId, {
         stage: 'scraping',
         message: `Scraped ${i + 1}/${uniqueUrls.length} pages...`,
         urlsFound: uniqueUrls.length,
         progress: 35 + (i / uniqueUrls.length) * 25,
-      })
+      }, job)
     }
 
     logger.info({ jobId, pagesScraped: pageContents.length }, 'Scraped pages')
     await job.updateProgress(60)
 
     // Stage 4: Extract prospects using Claude
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'extracting',
       message: 'AI analyzing scraped content for prospects...',
       urlsFound: uniqueUrls.length,
       progress: 65,
-    })
+    }, job)
 
     const anthropic = new Anthropic({ apiKey })
     const allProspects: Prospect[] = []
@@ -375,13 +393,13 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
         logger.warn({ url, error: err }, 'Failed to extract from page')
       }
 
-      emitProgress(jobId, {
+      await emitProgress(jobId, {
         stage: 'extracting',
         message: `Analyzed ${i + 1}/${pageContents.length} pages, found ${allProspects.length} prospects...`,
         urlsFound: uniqueUrls.length,
         prospectsFound: allProspects.length,
         progress: 65 + (i / pageContents.length) * 25,
-      })
+      }, job)
     }
 
     await job.updateProgress(90)
@@ -408,13 +426,13 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
     const hunterApiKey = hunterKeySetting?.value as string | undefined
 
     if (hunterApiKey && batchProspects.length > 0) {
-      emitProgress(jobId, {
+      await emitProgress(jobId, {
         stage: 'enriching',
         message: `Finding & verifying email addresses for ${batchProspects.length} prospects...`,
         urlsFound: uniqueUrls.length,
         prospectsFound: batchProspects.length,
         progress: 90,
-      })
+      }, job)
 
       let emailsFound = 0
       let verifiedCount = 0
@@ -466,7 +484,7 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
 
         // Update progress periodically
         if (i % 5 === 0 || i === batchProspects.length - 1) {
-          emitProgress(jobId, {
+          await emitProgress(jobId, {
             stage: 'enriching',
             message: `Finding emails: ${i + 1}/${batchProspects.length} (${emailsFound} found, ${verifiedCount} verified)...`,
             urlsFound: uniqueUrls.length,
@@ -474,7 +492,7 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
             emailsFound,
             verifiedCount,
             progress: 90 + (i / batchProspects.length) * 2,
-          })
+          }, job)
         }
       }
 
@@ -488,13 +506,13 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
     }
 
     // Stage 5: Dedupe against existing database
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'extracting',
       message: 'Checking for duplicates...',
       urlsFound: uniqueUrls.length,
       prospectsFound: batchProspects.length,
       progress: 92,
-    })
+    }, job)
 
     // Check each prospect against existing database
     const newProspects: Prospect[] = []
@@ -523,13 +541,13 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
     logger.info({ jobId, newCount: newProspects.length, duplicates: duplicateCount }, 'Deduplication complete')
 
     // Stage 6: Save to database
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'extracting',
       message: `Saving ${newProspects.length} new prospects (${duplicateCount} duplicates skipped)...`,
       urlsFound: uniqueUrls.length,
       prospectsFound: newProspects.length,
       progress: 95,
-    })
+    }, job)
 
     let insertedCount = 0
     if (newProspects.length > 0) {
@@ -556,14 +574,14 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
         ? `All ${duplicateCount} prospects found were already in your database.`
         : 'No matching prospects found. Try broader criteria.'
 
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'complete',
       message: completeMessage,
       urlsFound: uniqueUrls.length,
       prospectsFound: insertedCount,
       duplicatesSkipped: duplicateCount,
       progress: 100,
-    })
+    }, job)
 
     // Log activity
     await supabase.from('activity_log').insert({
@@ -586,11 +604,11 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
   } catch (error) {
     logger.error({ jobId, error }, 'Research job failed')
 
-    emitProgress(jobId, {
+    await emitProgress(jobId, {
       stage: 'complete',
       message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
       progress: 100,
-    })
+    }, job)
 
     return {
       success: false,

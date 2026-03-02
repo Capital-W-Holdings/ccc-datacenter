@@ -87,6 +87,7 @@ router.get('/ai/:jobId/status', async (req, res, next) => {
           data: {
             status: status.state,
             progress: status.progress,
+            progressData: status.progressData,  // Rich progress with stage, message, etc.
             result: status.result,
           },
         })

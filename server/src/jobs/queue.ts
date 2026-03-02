@@ -44,6 +44,20 @@ export function getRedisConnection(): ConnectionOptions {
   return connectionOptions
 }
 
+/**
+ * Rich progress data stored in job.data by workers
+ */
+export interface JobProgressData {
+  stage?: string
+  message?: string
+  progress?: number
+  urlsFound?: number
+  prospectsFound?: number
+  emailsFound?: number
+  verifiedCount?: number
+  duplicatesSkipped?: number
+}
+
 // Job types
 export type ScraperJobData = {
   scraperId: string
@@ -75,6 +89,7 @@ export type ResearchJobData = {
   apiKey: string
   maxUrls?: number
   userId?: string
+  lastProgress?: JobProgressData  // Rich progress stored by worker
 }
 
 export type JobData = ScraperJobData | EnrichmentJobData | ExportJobData | ResearchJobData
@@ -284,6 +299,7 @@ export async function getJobStatus(
   id: string
   state: string
   progress: number
+  progressData?: JobProgressData
   data: unknown
   result?: unknown
   failedReason?: string
@@ -312,10 +328,15 @@ export async function getJobStatus(
 
   const state = await job.getState()
 
+  // Extract rich progress from job.data.lastProgress (set by workers)
+  const jobData = job.data as Record<string, unknown>
+  const progressData = jobData?.lastProgress as JobProgressData | undefined
+
   return {
     id: job.id || '',
     state,
     progress: job.progress as number,
+    progressData,
     data: job.data,
     result: job.returnvalue,
     failedReason: job.failedReason,

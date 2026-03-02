@@ -15,10 +15,13 @@ interface AIResearchModalProps {
 }
 
 interface ResearchProgress {
-  stage: 'understanding' | 'searching' | 'analyzing' | 'scraping' | 'extracting' | 'complete'
+  stage: 'understanding' | 'searching' | 'analyzing' | 'scraping' | 'extracting' | 'enriching' | 'complete'
   message: string
   urlsFound?: number
   prospectsFound?: number
+  emailsFound?: number
+  verifiedCount?: number
+  duplicatesSkipped?: number
   progress?: number
 }
 
@@ -38,6 +41,7 @@ const stageIcons = {
   analyzing: Globe,
   scraping: Globe,
   extracting: Users,
+  enriching: Users,
   complete: Users,
 }
 
@@ -47,6 +51,7 @@ const stageLabels = {
   analyzing: 'Analyzing potential data sources...',
   scraping: 'Extracting data from websites...',
   extracting: 'Processing and structuring prospects...',
+  enriching: 'Finding email addresses...',
   complete: 'Research complete!',
 }
 
@@ -200,17 +205,24 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
       const maxPollsBeforeWarning = 15 // ~30 seconds
       const maxPollsBeforeError = 30 // ~60 seconds
 
+      console.log('[Research] Starting polling for job:', jobId)
+
       pollIntervalRef.current = setInterval(async () => {
         pollCount++
 
         try {
           const statusResponse = await researchApi.getAIResearchStatus(jobId)
-          if (statusResponse.data) {
-            const { status: state, progress: jobProgress, result: returnvalue } = statusResponse.data
+          console.log('[Research] Poll #' + pollCount + ' response:', statusResponse.data)
 
-            // jobProgress can be a number or an object - normalize it
-            const progressData = typeof jobProgress === 'object' ? jobProgress : null
-            const progressNumber = typeof jobProgress === 'number' ? jobProgress : progressData?.progress
+          if (statusResponse.data) {
+            const { status: state, progress: jobProgress, progressData: richProgress, result: returnvalue } = statusResponse.data
+
+            // Prefer progressData (from job.data.lastProgress) over jobProgress
+            // progressData contains rich progress with stage, message, etc.
+            const progressObj = richProgress || (typeof jobProgress === 'object' ? jobProgress : null)
+            const progressNumber = progressObj?.progress ?? (typeof jobProgress === 'number' ? jobProgress : undefined)
+
+            console.log('[Research] State:', state, 'Progress:', progressNumber, 'ProgressData:', progressObj)
 
             // Map BullMQ state to our stages
             let stage: ResearchProgress['stage'] = 'understanding'
@@ -239,33 +251,38 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
                 return
               }
             } else if (state === 'active') {
-              if (progressData?.stage) {
-                stage = progressData.stage as ResearchProgress['stage']
-                message = progressData.message || stageLabels[stage]
+              if (progressObj?.stage) {
+                // Use rich progress data from server
+                stage = progressObj.stage as ResearchProgress['stage']
+                message = progressObj.message || stageLabels[stage] || `Processing (${stage})...`
               } else {
-                // Use progress percentage to determine stage
-                if (progressNumber && progressNumber >= 80) {
+                // Fallback: use progress percentage to determine stage
+                if (progressNumber !== undefined && progressNumber >= 80) {
                   stage = 'extracting'
                   message = 'Extracting prospects...'
-                } else if (progressNumber && progressNumber >= 50) {
+                } else if (progressNumber !== undefined && progressNumber >= 50) {
                   stage = 'scraping'
                   message = 'Scraping web pages...'
-                } else if (progressNumber && progressNumber >= 20) {
+                } else if (progressNumber !== undefined && progressNumber >= 20) {
                   stage = 'analyzing'
                   message = 'Analyzing sources...'
                 } else {
                   stage = 'searching'
-                  message = 'Searching the web...'
+                  message = progressNumber !== undefined ? `Searching... (${progressNumber}%)` : 'Processing...'
                 }
               }
               setProgress({
                 stage,
                 message,
-                urlsFound: progressData?.urlsFound,
-                prospectsFound: progressData?.prospectsFound,
+                urlsFound: progressObj?.urlsFound,
+                prospectsFound: progressObj?.prospectsFound,
+                emailsFound: progressObj?.emailsFound,
+                verifiedCount: progressObj?.verifiedCount,
+                duplicatesSkipped: progressObj?.duplicatesSkipped,
                 progress: progressNumber,
               })
             } else if (state === 'completed') {
+              console.log('[Research] Job completed!')
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current)
                 pollIntervalRef.current = null
@@ -274,9 +291,10 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
               cleanupRef.current = null
               // Handle nested result structure
               const resultData = returnvalue?.data || returnvalue
-              const prospectsFound = resultData?.savedCount || resultData?.prospectsFound || progressData?.prospectsFound || 0
+              const prospectsFound = resultData?.savedCount || resultData?.prospectsFound || progressObj?.prospectsFound || 0
               handleComplete(prospectsFound, resultData?.prospectIds)
             } else if (state === 'failed') {
+              console.log('[Research] Job failed!')
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current)
                 pollIntervalRef.current = null
@@ -285,10 +303,28 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
               cleanupRef.current = null
               toast.error('Research failed. Please try again.')
               setProgress(null)
+            } else {
+              // Unknown state - log it and show something
+              console.warn('[Research] Unknown state:', state)
+              setProgress({
+                stage: 'understanding',
+                message: `Processing... (state: ${state})`,
+                progress: progressNumber,
+              })
+            }
+          } else {
+            console.warn('[Research] No data in response')
+            // Still show something to user
+            if (pollCount === 1) {
+              toast.error('No response from server. Check API connection.')
             }
           }
         } catch (err) {
           console.error('[Research] Polling error:', err)
+          // Show toast on first error so user knows something is wrong
+          if (pollCount === 1) {
+            toast.error('Failed to connect. Retrying...')
+          }
           // If we've been polling a while and keep getting errors, give up
           if (pollCount >= maxPollsBeforeError) {
             if (pollIntervalRef.current) {
