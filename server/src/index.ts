@@ -43,6 +43,16 @@ import { eventsRoutes } from './routes/events.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 
+// Determine CORS origin - use Railway env var in production
+const corsOrigin = process.env.NODE_ENV === 'production'
+  ? (process.env.CORS_ORIGIN?.trim() || 'http://localhost:5173')
+  : true
+
+// Log CORS config at startup for debugging
+console.log('[CORS] NODE_ENV:', process.env.NODE_ENV)
+console.log('[CORS] CORS_ORIGIN env:', process.env.CORS_ORIGIN)
+console.log('[CORS] Effective origin:', corsOrigin)
+
 // ===========================
 // SECURITY MIDDLEWARE STACK
 // ===========================
@@ -53,9 +63,7 @@ app.use(secureHeaders)
 // 2. CORS configuration
 app.use(
   cors({
-    origin: process.env.NODE_ENV === 'production'
-      ? process.env.CORS_ORIGIN || 'http://localhost:5173'
-      : true,
+    origin: corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-ID'],
