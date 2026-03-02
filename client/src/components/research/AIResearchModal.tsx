@@ -170,31 +170,51 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
 
             // jobProgress can be a number or an object - normalize it
             const progressData = typeof jobProgress === 'object' ? jobProgress : null
+            const progressNumber = typeof jobProgress === 'number' ? jobProgress : progressData?.progress
 
             // Map BullMQ state to our stages
             let stage: ResearchProgress['stage'] = 'understanding'
             let message = 'Starting research...'
 
-            if (state === 'active') {
+            if (state === 'waiting' || state === 'delayed') {
+              // Job is queued, waiting to start
+              stage = 'understanding'
+              message = 'Queued, waiting to start...'
+              setProgress({ stage, message })
+            } else if (state === 'active') {
               if (progressData?.stage) {
                 stage = progressData.stage as ResearchProgress['stage']
                 message = progressData.message || stageLabels[stage]
               } else {
-                stage = 'searching'
-                message = 'Processing...'
+                // Use progress percentage to determine stage
+                if (progressNumber && progressNumber >= 80) {
+                  stage = 'extracting'
+                  message = 'Extracting prospects...'
+                } else if (progressNumber && progressNumber >= 50) {
+                  stage = 'scraping'
+                  message = 'Scraping web pages...'
+                } else if (progressNumber && progressNumber >= 20) {
+                  stage = 'analyzing'
+                  message = 'Analyzing sources...'
+                } else {
+                  stage = 'searching'
+                  message = 'Searching the web...'
+                }
               }
               setProgress({
                 stage,
                 message,
                 urlsFound: progressData?.urlsFound,
                 prospectsFound: progressData?.prospectsFound,
-                progress: progressData?.progress,
+                progress: progressNumber,
               })
             } else if (state === 'completed') {
               clearInterval(pollInterval)
               cleanup()
-              const prospectsFound = returnvalue?.savedCount || progressData?.prospectsFound || 0
-              handleComplete(prospectsFound, returnvalue?.prospectIds)
+              // Handle nested result structure
+              const resultData = returnvalue?.data || returnvalue
+              const prospectsFound = resultData?.savedCount || resultData?.prospectsFound || progressData?.prospectsFound || 0
+              handleComplete(prospectsFound, resultData?.prospectIds)
             } else if (state === 'failed') {
               clearInterval(pollInterval)
               cleanup()
@@ -202,8 +222,9 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
               setProgress(null)
             }
           }
-        } catch {
-          // Silent fail - polling is a backup
+        } catch (err) {
+          console.error('[Research] Polling error:', err)
+          // Continue polling - might be a temporary network issue
         }
       }, 2000)
 
