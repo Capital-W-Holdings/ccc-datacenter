@@ -38,10 +38,20 @@ async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  // Add API key for authentication if configured
+  const apiSecret = import.meta.env.VITE_APP_SECRET
+  if (apiSecret) {
+    headers['x-api-key'] = apiSecret
+  }
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...headers,
       ...options.headers,
     },
   })

@@ -1,4 +1,5 @@
 import pino from 'pino'
+import crypto from 'crypto'
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 

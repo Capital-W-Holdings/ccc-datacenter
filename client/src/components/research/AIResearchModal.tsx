@@ -150,43 +150,108 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
       const jobId = data.data.job_id
       onJobStarted(jobId)
 
+      // Set up WebSocket listener
       const eventName = `research:${jobId}`
       const cleanup = on(eventName, async (event) => {
         const progressEvent = event as ResearchProgress & { prospectIds?: string[] }
         setProgress(progressEvent)
         if (progressEvent.stage === 'complete') {
-          toast.success(`Found ${progressEvent.prospectsFound || 0} prospects!`)
-          queryClient.invalidateQueries({ queryKey: ['prospects'] })
-
-          // Capture prospect IDs if provided, otherwise fetch recent prospects
-          if (progressEvent.prospectIds && progressEvent.prospectIds.length > 0) {
-            setFoundProspectIds(progressEvent.prospectIds)
-          } else if (progressEvent.prospectsFound && progressEvent.prospectsFound > 0) {
-            // Fetch recently added prospects (added in last 5 minutes from ai_research source)
-            try {
-              const recentProspects = await prospectsApi.list({
-                page: 1,
-                per_page: progressEvent.prospectsFound,
-                sort_by: 'created_at',
-                sort_dir: 'desc',
-              })
-              if (recentProspects.data) {
-                setFoundProspectIds(recentProspects.data.slice(0, progressEvent.prospectsFound).map(p => p.id))
-              }
-            } catch {
-              // Silent fail - user can still manually add to events
-            }
-          }
+          handleComplete(progressEvent.prospectsFound || 0, progressEvent.prospectIds)
           cleanup()
         }
       })
 
+      // Also poll for status as fallback (WebSocket can be unreliable)
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await researchApi.getAIResearchStatus(jobId)
+          if (status.data) {
+            const { state, progress: jobProgress, returnvalue } = status.data
+
+            // Map BullMQ state to our stages
+            let stage: ResearchProgress['stage'] = 'understanding'
+            let message = 'Starting research...'
+
+            if (state === 'active') {
+              if (jobProgress?.stage) {
+                stage = jobProgress.stage as ResearchProgress['stage']
+                message = jobProgress.message || stageLabels[stage]
+              } else {
+                stage = 'searching'
+                message = 'Processing...'
+              }
+              setProgress({
+                stage,
+                message,
+                urlsFound: jobProgress?.urlsFound,
+                prospectsFound: jobProgress?.prospectsFound,
+                progress: jobProgress?.progress,
+              })
+            } else if (state === 'completed') {
+              clearInterval(pollInterval)
+              cleanup()
+              const prospectsFound = returnvalue?.savedCount || jobProgress?.prospectsFound || 0
+              handleComplete(prospectsFound, returnvalue?.prospectIds)
+            } else if (state === 'failed') {
+              clearInterval(pollInterval)
+              cleanup()
+              toast.error('Research failed. Please try again.')
+              setProgress(null)
+            }
+          }
+        } catch {
+          // Silent fail - polling is a backup
+        }
+      }, 2000)
+
+      // Clean up polling on unmount
+      const originalCleanup = cleanup
+      const wrappedCleanup = () => {
+        clearInterval(pollInterval)
+        originalCleanup()
+      }
+
       setProgress({ stage: 'understanding', message: 'Starting research...' })
+
+      // Store cleanup for potential unmount
+      return () => {
+        wrappedCleanup()
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message)
     },
   })
+
+  const handleComplete = async (prospectsFound: number, prospectIds?: string[]) => {
+    toast.success(`Found ${prospectsFound} prospects!`)
+    queryClient.invalidateQueries({ queryKey: ['prospects'] })
+
+    setProgress({
+      stage: 'complete',
+      message: 'Research complete!',
+      prospectsFound,
+    })
+
+    // Capture prospect IDs if provided, otherwise fetch recent prospects
+    if (prospectIds && prospectIds.length > 0) {
+      setFoundProspectIds(prospectIds)
+    } else if (prospectsFound > 0) {
+      try {
+        const recentProspects = await prospectsApi.list({
+          page: 1,
+          per_page: prospectsFound,
+          sort_by: 'created_at',
+          sort_dir: 'desc',
+        })
+        if (recentProspects.data) {
+          setFoundProspectIds(recentProspects.data.slice(0, prospectsFound).map(p => p.id))
+        }
+      } catch {
+        // Silent fail - user can still manually add to events
+      }
+    }
+  }
 
   const handleSubmit = () => {
     // At minimum need some criteria
