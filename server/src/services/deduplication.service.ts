@@ -45,10 +45,18 @@ export class DeduplicationService {
   }): Promise<DeduplicationResult> {
     const duplicates: DuplicateMatch[] = []
 
+    logger.info({
+      checking: prospect.full_name,
+      email: prospect.email,
+      company: prospect.company,
+      linkedin: prospect.linkedin_url,
+    }, 'Dedup: checking prospect')
+
     // 1. Check exact email match (100% duplicate)
     if (prospect.email) {
       const emailMatch = await this.findByEmail(prospect.email)
       if (emailMatch) {
+        logger.info({ prospect: prospect.full_name, matchedEmail: prospect.email }, 'Dedup: EMAIL MATCH')
         duplicates.push({
           existingId: emailMatch.id,
           score: 100,
@@ -62,6 +70,7 @@ export class DeduplicationService {
     if (prospect.linkedin_url) {
       const linkedinMatch = await this.findByLinkedIn(prospect.linkedin_url)
       if (linkedinMatch) {
+        logger.info({ prospect: prospect.full_name, matchedLinkedIn: prospect.linkedin_url }, 'Dedup: LINKEDIN MATCH')
         duplicates.push({
           existingId: linkedinMatch.id,
           score: 100,
@@ -77,25 +86,22 @@ export class DeduplicationService {
         prospect.full_name,
         prospect.company
       )
+      if (fuzzyMatches.length > 0) {
+        logger.info({ prospect: prospect.full_name, company: prospect.company, matches: fuzzyMatches }, 'Dedup: NAME+COMPANY MATCH')
+      }
       duplicates.push(...fuzzyMatches)
     }
-
-    // 4. Name-only matching is TOO AGGRESSIVE - disabled
-    // It was marking "John Smith at Google" as duplicate of "John Smith at AWS"
-    // Only email, LinkedIn, or name+company should count as duplicates
 
     // Sort by score
     duplicates.sort((a, b) => b.score - a.score)
 
-    // Log what we found for debugging
-    if (duplicates.length > 0) {
-      logger.debug({
-        prospect: prospect.full_name,
-        company: prospect.company,
-        duplicateCount: duplicates.length,
-        bestMatch: duplicates[0],
-      }, 'Found potential duplicate')
-    }
+    // Log final result
+    logger.info({
+      prospect: prospect.full_name,
+      isNew: duplicates.length === 0,
+      duplicateCount: duplicates.length,
+      matchTypes: duplicates.map(d => d.matchType),
+    }, duplicates.length > 0 ? 'Dedup: MARKED AS DUPLICATE' : 'Dedup: NEW PROSPECT')
 
     return {
       isNew: duplicates.length === 0,

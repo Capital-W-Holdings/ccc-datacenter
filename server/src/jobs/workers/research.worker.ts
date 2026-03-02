@@ -551,18 +551,24 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
 
     let insertedCount = 0
     if (newProspects.length > 0) {
+      logger.info({ jobId, count: newProspects.length }, 'Attempting to insert prospects')
+      logger.info({ sample: newProspects.slice(0, 2) }, 'Sample prospects to insert')
+
       const { data: inserted, error } = await supabase
         .from('prospects')
         .insert(newProspects)
         .select()
 
       if (error) {
-        logger.error({ jobId, error }, 'Failed to insert prospects')
+        logger.error({ jobId, error: error.message, code: error.code, details: error.details }, 'Failed to insert prospects')
       } else {
         insertedCount = inserted?.length || 0
+        logger.info({ jobId, insertedCount }, 'Successfully inserted prospects')
         // Invalidate dedup cache since we added new records
         deduplicationService.invalidateCache()
       }
+    } else {
+      logger.info({ jobId }, 'No new prospects to insert (all were duplicates)')
     }
 
     await job.updateProgress(100)
