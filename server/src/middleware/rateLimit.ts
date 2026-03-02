@@ -34,31 +34,31 @@ export const strictRateLimiter = rateLimit({
 })
 
 /**
- * Scraper rate limiter - prevent abuse of scraping endpoints
- * 5 scrape jobs per hour
+ * Scraper rate limiter - very permissive for owner use
+ * 1000 scrape jobs per hour (effectively unlimited)
  */
 export const scraperRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    error: 'Scraper rate limit exceeded - max 5 jobs per hour',
+    error: 'Scraper rate limit exceeded',
   },
 })
 
 /**
- * Enrichment rate limiter - protect AI API usage
- * 20 enrichment jobs per hour
+ * Enrichment rate limiter - permissive for owner use
+ * 500 enrichment jobs per hour
  */
 export const enrichmentRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 20,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    error: 'Enrichment rate limit exceeded - max 20 jobs per hour',
+    error: 'Enrichment rate limit exceeded',
   },
 })
