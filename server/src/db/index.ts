@@ -5,9 +5,12 @@ dotenv.config()
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+const keyType = process.env.SUPABASE_SERVICE_KEY ? 'SERVICE_KEY' : 'ANON_KEY'
 
 if (!supabaseUrl || !supabaseKey) {
   console.warn('Warning: Supabase credentials not found. Database operations will fail.')
+} else {
+  console.log(`[DB] Connected to Supabase using ${keyType}`)
 }
 
 export const supabase = createClient(
