@@ -62,7 +62,11 @@ export class DeduplicationService {
           matchType: 'exact_email',
           matchedFields: ['email'],
         })
+      } else {
+        logger.info(`Dedup: No email match for "${prospect.email}"`)
       }
+    } else {
+      logger.info(`Dedup: No email to check for "${prospect.full_name}"`)
     }
 
     // 2. Check exact LinkedIn URL match (100% duplicate)
@@ -78,7 +82,11 @@ export class DeduplicationService {
           matchType: 'exact_linkedin',
           matchedFields: ['linkedin_url'],
         })
+      } else {
+        logger.info(`Dedup: No LinkedIn match for "${prospect.linkedin_url}"`)
       }
+    } else {
+      logger.info(`Dedup: No LinkedIn URL to check for "${prospect.full_name}"`)
     }
 
     // 3. Check fuzzy name + company match
@@ -88,9 +96,13 @@ export class DeduplicationService {
         prospect.company
       )
       if (fuzzyMatches.length > 0) {
-        logger.info(`Dedup: NAME+COMPANY MATCH - "${prospect.full_name}" at "${prospect.company}" fuzzy-matched (score: ${fuzzyMatches[0].score})`)
+        logger.info(`Dedup: NAME+COMPANY MATCH - "${prospect.full_name}" at "${prospect.company}" fuzzy-matched "${fuzzyMatches[0].existingName}" (score: ${fuzzyMatches[0].score})`)
+      } else {
+        logger.info(`Dedup: No fuzzy name+company match for "${prospect.full_name}" at "${prospect.company}"`)
       }
       duplicates.push(...fuzzyMatches)
+    } else {
+      logger.info(`Dedup: No company to check fuzzy match for "${prospect.full_name}"`)
     }
 
     // Sort by score
@@ -188,11 +200,11 @@ export class DeduplicationService {
     )
 
     if (sameCompany.length === 0) {
-      logger.debug(`Dedup: No existing prospects at normalized company "${normalizedCompany}" (raw: "${company}")`)
+      logger.info(`Dedup: No existing prospects at normalized company "${normalizedCompany}" (raw: "${company}")`)
       return matches
     }
 
-    logger.debug(`Dedup: Found ${sameCompany.length} existing prospects at normalized company "${normalizedCompany}": ${sameCompany.map(p => p.full_name).slice(0, 5).join(', ')}${sameCompany.length > 5 ? '...' : ''}`)
+    logger.info(`Dedup: Found ${sameCompany.length} existing prospects at normalized company "${normalizedCompany}": ${sameCompany.map(p => p.full_name).slice(0, 5).join(', ')}${sameCompany.length > 5 ? '...' : ''}`)
 
     // Fuzzy search on names
     const fuse = new Fuse(sameCompany, {
