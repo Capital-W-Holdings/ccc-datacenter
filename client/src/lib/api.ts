@@ -180,17 +180,22 @@ export const scrapersApi = {
     }),
 }
 
-// AI Research
-export interface AIResearchProgress {
-  jobId: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  progress: number
-  currentStage: string
-  urlsProcessed: number
-  urlsTotal: number
-  prospectsFound: number
-  message: string
-  error?: string
+// AI Research - matches BullMQ job status format from server
+export interface AIResearchJobProgress {
+  stage?: string
+  message?: string
+  urlsFound?: number
+  prospectsFound?: number
+  progress?: number
+}
+
+export interface AIResearchStatus {
+  status: string // BullMQ state: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed'
+  progress: number | AIResearchJobProgress // Can be number (0-100) or object with stage details
+  result?: {
+    savedCount?: number
+    prospectIds?: string[]
+  }
 }
 
 export const researchApi = {
@@ -207,7 +212,7 @@ export const researchApi = {
     }),
 
   getAIResearchStatus: (jobId: string) =>
-    fetchApi<ApiResponse<AIResearchProgress>>(`/research/ai/${jobId}/status`),
+    fetchApi<ApiResponse<AIResearchStatus>>(`/research/ai/${jobId}/status`),
 }
 
 // Enrichment

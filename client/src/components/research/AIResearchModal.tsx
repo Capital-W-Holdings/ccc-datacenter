@@ -164,18 +164,21 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
       // Also poll for status as fallback (WebSocket can be unreliable)
       const pollInterval = setInterval(async () => {
         try {
-          const status = await researchApi.getAIResearchStatus(jobId)
-          if (status.data) {
-            const { state, progress: jobProgress, returnvalue } = status.data
+          const statusResponse = await researchApi.getAIResearchStatus(jobId)
+          if (statusResponse.data) {
+            const { status: state, progress: jobProgress, result: returnvalue } = statusResponse.data
+
+            // jobProgress can be a number or an object - normalize it
+            const progressData = typeof jobProgress === 'object' ? jobProgress : null
 
             // Map BullMQ state to our stages
             let stage: ResearchProgress['stage'] = 'understanding'
             let message = 'Starting research...'
 
             if (state === 'active') {
-              if (jobProgress?.stage) {
-                stage = jobProgress.stage as ResearchProgress['stage']
-                message = jobProgress.message || stageLabels[stage]
+              if (progressData?.stage) {
+                stage = progressData.stage as ResearchProgress['stage']
+                message = progressData.message || stageLabels[stage]
               } else {
                 stage = 'searching'
                 message = 'Processing...'
@@ -183,14 +186,14 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
               setProgress({
                 stage,
                 message,
-                urlsFound: jobProgress?.urlsFound,
-                prospectsFound: jobProgress?.prospectsFound,
-                progress: jobProgress?.progress,
+                urlsFound: progressData?.urlsFound,
+                prospectsFound: progressData?.prospectsFound,
+                progress: progressData?.progress,
               })
             } else if (state === 'completed') {
               clearInterval(pollInterval)
               cleanup()
-              const prospectsFound = returnvalue?.savedCount || jobProgress?.prospectsFound || 0
+              const prospectsFound = returnvalue?.savedCount || progressData?.prospectsFound || 0
               handleComplete(prospectsFound, returnvalue?.prospectIds)
             } else if (state === 'failed') {
               clearInterval(pollInterval)
