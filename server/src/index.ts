@@ -43,15 +43,42 @@ import { eventsRoutes } from './routes/events.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 
-// Determine CORS origin - use Railway env var in production
-const corsOrigin = process.env.NODE_ENV === 'production'
-  ? (process.env.CORS_ORIGIN?.trim() || 'http://localhost:5173')
-  : true
+// Determine CORS origin - supports multiple origins including Vercel preview deployments
+const getCorsOrigin = () => {
+  // In development, allow all origins
+  if (process.env.NODE_ENV !== 'production') {
+    return true
+  }
+
+  const primaryOrigin = process.env.CORS_ORIGIN?.trim()
+
+  // Return a function that validates origins dynamically
+  return (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) {
+      return callback(null, true)
+    }
+
+    // Allow the primary configured origin
+    if (primaryOrigin && origin === primaryOrigin) {
+      return callback(null, true)
+    }
+
+    // Allow any Vercel deployment (production and preview)
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true)
+    }
+
+    // Log rejected origins for debugging
+    console.log('[CORS] Rejected origin:', origin)
+    callback(new Error('Not allowed by CORS'))
+  }
+}
 
 // Log CORS config at startup for debugging
 console.log('[CORS] NODE_ENV:', process.env.NODE_ENV)
 console.log('[CORS] CORS_ORIGIN env:', process.env.CORS_ORIGIN)
-console.log('[CORS] Effective origin:', corsOrigin)
+console.log('[CORS] Mode:', process.env.NODE_ENV === 'production' ? 'dynamic (allows *.vercel.app)' : 'permissive (all origins)')
 
 // ===========================
 // SECURITY MIDDLEWARE STACK
@@ -63,7 +90,7 @@ app.use(secureHeaders)
 // 2. CORS configuration
 app.use(
   cors({
-    origin: corsOrigin,
+    origin: getCorsOrigin(),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-ID'],
