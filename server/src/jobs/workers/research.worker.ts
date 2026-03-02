@@ -563,7 +563,7 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
         .select()
 
       if (error) {
-        logger.error({ jobId, error: error.message, code: error.code, details: error.details }, 'Failed to insert prospects')
+        logger.error(`Failed to insert prospects: ${error.message} (code: ${error.code}, details: ${JSON.stringify(error.details)}, hint: ${error.hint})`)
       } else {
         insertedCount = inserted?.length || 0
         logger.info({ jobId, insertedCount }, 'Successfully inserted prospects')
