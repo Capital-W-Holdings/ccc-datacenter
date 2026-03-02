@@ -14,6 +14,8 @@ export interface ProspectRecord {
 
 export interface DuplicateMatch {
   existingId: string
+  existingName?: string
+  existingCompany?: string
   score: number
   matchType: 'exact_email' | 'exact_linkedin' | 'fuzzy_name_company'
   matchedFields: string[]
@@ -51,9 +53,11 @@ export class DeduplicationService {
     if (prospect.email) {
       const emailMatch = await this.findByEmail(prospect.email)
       if (emailMatch) {
-        logger.info(`Dedup: EMAIL MATCH - "${prospect.full_name}" matched on email ${prospect.email}`)
+        logger.info(`Dedup: EMAIL MATCH - "${prospect.full_name}" matched existing "${emailMatch.full_name}" on email ${prospect.email}`)
         duplicates.push({
           existingId: emailMatch.id,
+          existingName: emailMatch.full_name,
+          existingCompany: emailMatch.company || undefined,
           score: 100,
           matchType: 'exact_email',
           matchedFields: ['email'],
@@ -65,9 +69,11 @@ export class DeduplicationService {
     if (prospect.linkedin_url) {
       const linkedinMatch = await this.findByLinkedIn(prospect.linkedin_url)
       if (linkedinMatch) {
-        logger.info(`Dedup: LINKEDIN MATCH - "${prospect.full_name}" matched on LinkedIn`)
+        logger.info(`Dedup: LINKEDIN MATCH - "${prospect.full_name}" matched existing "${linkedinMatch.full_name}" on LinkedIn`)
         duplicates.push({
           existingId: linkedinMatch.id,
+          existingName: linkedinMatch.full_name,
+          existingCompany: linkedinMatch.company || undefined,
           score: 100,
           matchType: 'exact_linkedin',
           matchedFields: ['linkedin_url'],
@@ -90,9 +96,12 @@ export class DeduplicationService {
     // Sort by score
     duplicates.sort((a, b) => b.score - a.score)
 
-    // Log final result
+    // Log final result with full details
     if (duplicates.length > 0) {
-      logger.info(`Dedup: DUPLICATE - "${prospect.full_name}" matched via ${duplicates.map(d => d.matchType).join(', ')}`)
+      const matchDetails = duplicates.map(d =>
+        `${d.matchType} (score: ${d.score}, matched "${d.existingName || 'unknown'}" at "${d.existingCompany || 'unknown'}")`
+      ).join('; ')
+      logger.info(`Dedup: DUPLICATE - "${prospect.full_name}" at "${prospect.company || 'no company'}" matched: ${matchDetails}`)
     } else {
       logger.info(`Dedup: NEW - "${prospect.full_name}" at "${prospect.company || 'no company'}" is NEW`)
     }
@@ -171,13 +180,19 @@ export class DeduplicationService {
   ): Promise<DuplicateMatch[]> {
     const matches: DuplicateMatch[] = []
     const existingProspects = await this.getProspectsCache()
+    const normalizedCompany = this.normalizeCompany(company)
 
     // Filter to same company first
     const sameCompany = existingProspects.filter((p) =>
-      p.company && this.normalizeCompany(p.company) === this.normalizeCompany(company)
+      p.company && this.normalizeCompany(p.company) === normalizedCompany
     )
 
-    if (sameCompany.length === 0) return matches
+    if (sameCompany.length === 0) {
+      logger.debug(`Dedup: No existing prospects at normalized company "${normalizedCompany}" (raw: "${company}")`)
+      return matches
+    }
+
+    logger.debug(`Dedup: Found ${sameCompany.length} existing prospects at normalized company "${normalizedCompany}": ${sameCompany.map(p => p.full_name).slice(0, 5).join(', ')}${sameCompany.length > 5 ? '...' : ''}`)
 
     // Fuzzy search on names
     const fuse = new Fuse(sameCompany, {
@@ -193,6 +208,8 @@ export class DeduplicationService {
         // 85%+ match
         matches.push({
           existingId: result.item.id,
+          existingName: result.item.full_name,
+          existingCompany: result.item.company || undefined,
           score: Math.round((1 - result.score) * 100),
           matchType: 'fuzzy_name_company',
           matchedFields: ['full_name', 'company'],
