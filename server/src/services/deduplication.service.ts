@@ -45,18 +45,13 @@ export class DeduplicationService {
   }): Promise<DeduplicationResult> {
     const duplicates: DuplicateMatch[] = []
 
-    logger.info({
-      checking: prospect.full_name,
-      email: prospect.email,
-      company: prospect.company,
-      linkedin: prospect.linkedin_url,
-    }, 'Dedup: checking prospect')
+    logger.info(`Dedup: checking "${prospect.full_name}" at "${prospect.company || 'no company'}" (email: ${prospect.email || 'none'})`)
 
     // 1. Check exact email match (100% duplicate)
     if (prospect.email) {
       const emailMatch = await this.findByEmail(prospect.email)
       if (emailMatch) {
-        logger.info({ prospect: prospect.full_name, matchedEmail: prospect.email }, 'Dedup: EMAIL MATCH')
+        logger.info(`Dedup: EMAIL MATCH - "${prospect.full_name}" matched on email ${prospect.email}`)
         duplicates.push({
           existingId: emailMatch.id,
           score: 100,
@@ -70,7 +65,7 @@ export class DeduplicationService {
     if (prospect.linkedin_url) {
       const linkedinMatch = await this.findByLinkedIn(prospect.linkedin_url)
       if (linkedinMatch) {
-        logger.info({ prospect: prospect.full_name, matchedLinkedIn: prospect.linkedin_url }, 'Dedup: LINKEDIN MATCH')
+        logger.info(`Dedup: LINKEDIN MATCH - "${prospect.full_name}" matched on LinkedIn`)
         duplicates.push({
           existingId: linkedinMatch.id,
           score: 100,
@@ -87,7 +82,7 @@ export class DeduplicationService {
         prospect.company
       )
       if (fuzzyMatches.length > 0) {
-        logger.info({ prospect: prospect.full_name, company: prospect.company, matches: fuzzyMatches }, 'Dedup: NAME+COMPANY MATCH')
+        logger.info(`Dedup: NAME+COMPANY MATCH - "${prospect.full_name}" at "${prospect.company}" fuzzy-matched (score: ${fuzzyMatches[0].score})`)
       }
       duplicates.push(...fuzzyMatches)
     }
@@ -96,12 +91,11 @@ export class DeduplicationService {
     duplicates.sort((a, b) => b.score - a.score)
 
     // Log final result
-    logger.info({
-      prospect: prospect.full_name,
-      isNew: duplicates.length === 0,
-      duplicateCount: duplicates.length,
-      matchTypes: duplicates.map(d => d.matchType),
-    }, duplicates.length > 0 ? 'Dedup: MARKED AS DUPLICATE' : 'Dedup: NEW PROSPECT')
+    if (duplicates.length > 0) {
+      logger.info(`Dedup: DUPLICATE - "${prospect.full_name}" matched via ${duplicates.map(d => d.matchType).join(', ')}`)
+    } else {
+      logger.info(`Dedup: NEW - "${prospect.full_name}" at "${prospect.company || 'no company'}" is NEW`)
+    }
 
     return {
       isNew: duplicates.length === 0,
@@ -229,7 +223,7 @@ export class DeduplicationService {
    * Refresh the prospects cache
    */
   private async refreshCache(): Promise<void> {
-    logger.debug('Refreshing prospects cache')
+    logger.info('Dedup: Refreshing prospects cache from database...')
 
     const { data, error } = await supabase
       .from('prospects')
@@ -238,13 +232,16 @@ export class DeduplicationService {
       .limit(10000) // Reasonable limit for in-memory fuzzy matching
 
     if (error) {
-      logger.error({ error: error.message }, 'Failed to refresh cache')
+      logger.error(`Dedup: Failed to refresh cache - ${error.message}`)
       return
     }
 
     this.cache.set('all', data as ProspectRecord[])
     this.lastCacheUpdate = Date.now()
-    logger.debug({ count: data.length }, 'Cache refreshed')
+
+    // Log what companies are in the database for debugging
+    const companies = [...new Set(data.map(p => p.company).filter(Boolean))]
+    logger.info(`Dedup: Cache loaded ${data.length} prospects from ${companies.length} companies: ${companies.slice(0, 10).join(', ')}${companies.length > 10 ? '...' : ''}`)
   }
 
   /**
