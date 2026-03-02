@@ -15,7 +15,7 @@ export interface ProspectRecord {
 export interface DuplicateMatch {
   existingId: string
   score: number
-  matchType: 'exact_email' | 'exact_linkedin' | 'fuzzy_name_company' | 'fuzzy_name'
+  matchType: 'exact_email' | 'exact_linkedin' | 'fuzzy_name_company'
   matchedFields: string[]
 }
 
@@ -80,14 +80,22 @@ export class DeduplicationService {
       duplicates.push(...fuzzyMatches)
     }
 
-    // 4. Check fuzzy name only (lower confidence)
-    const nameOnlyMatches = await this.findFuzzyNameMatches(prospect.full_name)
-    duplicates.push(...nameOnlyMatches.filter(
-      m => !duplicates.some(d => d.existingId === m.existingId)
-    ))
+    // 4. Name-only matching is TOO AGGRESSIVE - disabled
+    // It was marking "John Smith at Google" as duplicate of "John Smith at AWS"
+    // Only email, LinkedIn, or name+company should count as duplicates
 
     // Sort by score
     duplicates.sort((a, b) => b.score - a.score)
+
+    // Log what we found for debugging
+    if (duplicates.length > 0) {
+      logger.debug({
+        prospect: prospect.full_name,
+        company: prospect.company,
+        duplicateCount: duplicates.length,
+        bestMatch: duplicates[0],
+      }, 'Found potential duplicate')
+    }
 
     return {
       isNew: duplicates.length === 0,
@@ -195,35 +203,9 @@ export class DeduplicationService {
     return matches
   }
 
-  /**
-   * Find fuzzy matches by name only
-   */
-  private async findFuzzyNameMatches(name: string): Promise<DuplicateMatch[]> {
-    const matches: DuplicateMatch[] = []
-    const existingProspects = await this.getProspectsCache()
-
-    const fuse = new Fuse(existingProspects, {
-      keys: ['full_name'],
-      threshold: 0.2, // 80% similarity for name-only
-      includeScore: true,
-    })
-
-    const results = fuse.search(name)
-
-    for (const result of results) {
-      if (result.score !== undefined && result.score <= 0.1) {
-        // 90%+ match for name only
-        matches.push({
-          existingId: result.item.id,
-          score: Math.round((1 - result.score) * 80), // Cap at 80 for name-only
-          matchType: 'fuzzy_name',
-          matchedFields: ['full_name'],
-        })
-      }
-    }
-
-    return matches
-  }
+  // findFuzzyNameMatches removed - was too aggressive
+  // It marked "John Smith at Google" as duplicate of "John Smith at AWS"
+  // Deduplication now requires: exact email, exact LinkedIn, or name+company match
 
   /**
    * Get or refresh prospects cache
