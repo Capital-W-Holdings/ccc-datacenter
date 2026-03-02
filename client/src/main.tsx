@@ -7,6 +7,11 @@ import { WebSocketProvider } from './providers/WebSocketProvider'
 import App from './App'
 import './styles/globals.css'
 
+// Build info - helps verify correct env vars are baked in
+console.log('[CCC Build] API URL:', import.meta.env.VITE_API_URL)
+console.log('[CCC Build] WS URL:', import.meta.env.VITE_WS_URL)
+console.log('[CCC Build] Build time:', '2026-03-02T03:00:00Z')
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
