@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -95,6 +95,24 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
   const { on } = useWebSocket()
   const queryClient = useQueryClient()
 
+  // Refs to store cleanup function and polling interval
+  const cleanupRef = useRef<(() => void) | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+      if (cleanupRef.current) {
+        cleanupRef.current()
+        cleanupRef.current = null
+      }
+    }
+  }, [])
+
   // Fetch events for selection
   const { data: eventsData } = useQuery({
     queryKey: ['events', 'upcoming'],
@@ -147,17 +165,33 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
       return researchApi.startAIResearch({ query, maxUrls: criteria.maxUrls })
     },
     onSuccess: (data) => {
+      // Clean up any previous research polling/websocket
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+      if (cleanupRef.current) {
+        cleanupRef.current()
+        cleanupRef.current = null
+      }
+
       const jobId = data.data.job_id
       onJobStarted(jobId)
 
       // Set up WebSocket listener
       const eventName = `research:${jobId}`
-      const cleanup = on(eventName, async (event) => {
+      const wsCleanup = on(eventName, async (event) => {
         const progressEvent = event as ResearchProgress & { prospectIds?: string[] }
         setProgress(progressEvent)
         if (progressEvent.stage === 'complete') {
+          // Clear polling interval
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+          wsCleanup()
+          cleanupRef.current = null
           handleComplete(progressEvent.prospectsFound || 0, progressEvent.prospectIds)
-          cleanup()
         }
       })
 
@@ -166,7 +200,7 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
       const maxPollsBeforeWarning = 15 // ~30 seconds
       const maxPollsBeforeError = 30 // ~60 seconds
 
-      const pollInterval = setInterval(async () => {
+      pollIntervalRef.current = setInterval(async () => {
         pollCount++
 
         try {
@@ -194,8 +228,12 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
 
               // If stuck too long, show error
               if (pollCount >= maxPollsBeforeError) {
-                clearInterval(pollInterval)
-                cleanup()
+                if (pollIntervalRef.current) {
+                  clearInterval(pollIntervalRef.current)
+                  pollIntervalRef.current = null
+                }
+                wsCleanup()
+                cleanupRef.current = null
                 toast.error('Research job timed out. Workers may not be running - check Redis connection.')
                 setProgress(null)
                 return
@@ -228,15 +266,23 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
                 progress: progressNumber,
               })
             } else if (state === 'completed') {
-              clearInterval(pollInterval)
-              cleanup()
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+              wsCleanup()
+              cleanupRef.current = null
               // Handle nested result structure
               const resultData = returnvalue?.data || returnvalue
               const prospectsFound = resultData?.savedCount || resultData?.prospectsFound || progressData?.prospectsFound || 0
               handleComplete(prospectsFound, resultData?.prospectIds)
             } else if (state === 'failed') {
-              clearInterval(pollInterval)
-              cleanup()
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+              wsCleanup()
+              cleanupRef.current = null
               toast.error('Research failed. Please try again.')
               setProgress(null)
             }
@@ -245,8 +291,12 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
           console.error('[Research] Polling error:', err)
           // If we've been polling a while and keep getting errors, give up
           if (pollCount >= maxPollsBeforeError) {
-            clearInterval(pollInterval)
-            cleanup()
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            wsCleanup()
+            cleanupRef.current = null
             toast.error('Failed to get research status. Check server connection.')
             setProgress(null)
           }
@@ -254,19 +304,16 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
         }
       }, 2000)
 
-      // Clean up polling on unmount
-      const originalCleanup = cleanup
-      const wrappedCleanup = () => {
-        clearInterval(pollInterval)
-        originalCleanup()
+      // Store cleanup function in ref for proper cleanup
+      cleanupRef.current = () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = null
+        }
+        wsCleanup()
       }
 
       setProgress({ stage: 'understanding', message: 'Starting research...' })
-
-      // Store cleanup for potential unmount
-      return () => {
-        wrappedCleanup()
-      }
     },
     onError: (error: Error) => {
       toast.error(error.message)
