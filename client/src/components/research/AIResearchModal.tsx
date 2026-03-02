@@ -197,7 +197,12 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
           }
           wsCleanup()
           cleanupRef.current = null
-          handleComplete(progressEvent.prospectsFound || 0, progressEvent.prospectIds)
+          handleComplete(progressEvent.prospectsFound || 0, progressEvent.prospectIds, {
+            totalExtracted: progressEvent.totalExtracted,
+            duplicatesSkipped: progressEvent.duplicatesSkipped,
+            message: progressEvent.message,
+            urlsFound: progressEvent.urlsFound,
+          })
         }
       })
 
@@ -294,7 +299,12 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
               // Handle nested result structure
               const resultData = returnvalue?.data || returnvalue
               const prospectsFound = resultData?.savedCount || resultData?.prospectsFound || progressObj?.prospectsFound || 0
-              handleComplete(prospectsFound, resultData?.prospectIds)
+              handleComplete(prospectsFound, resultData?.prospectIds, {
+                totalExtracted: progressObj?.totalExtracted,
+                duplicatesSkipped: progressObj?.duplicatesSkipped,
+                message: progressObj?.message,
+                urlsFound: progressObj?.urlsFound,
+              })
             } else if (state === 'failed') {
               console.log('[Research] Job failed!')
               if (pollIntervalRef.current) {
@@ -358,14 +368,36 @@ export default function AIResearchModal({ onClose, onJobStarted }: AIResearchMod
     },
   })
 
-  const handleComplete = async (prospectsFound: number, prospectIds?: string[]) => {
-    toast.success(`Found ${prospectsFound} prospects!`)
+  const handleComplete = async (
+    prospectsFound: number,
+    prospectIds?: string[],
+    extraData?: { totalExtracted?: number; duplicatesSkipped?: number; message?: string; urlsFound?: number }
+  ) => {
+    // Show appropriate toast based on results
+    if (prospectsFound > 0) {
+      toast.success(`Found ${prospectsFound} new prospects!`)
+    } else if (extraData?.totalExtracted && extraData.totalExtracted > 0) {
+      toast(`Found ${extraData.totalExtracted} prospects, but all were already in your database.`, { icon: 'ℹ️' })
+    } else {
+      toast('No new prospects found.', { icon: 'ℹ️' })
+    }
     queryClient.invalidateQueries({ queryKey: ['prospects'] })
+
+    // Build completion message
+    let message = 'Research complete!'
+    if (extraData?.message) {
+      message = extraData.message
+    } else if (prospectsFound === 0 && extraData?.totalExtracted && extraData.totalExtracted > 0) {
+      message = `Found ${extraData.totalExtracted} prospects but all were already in your database.`
+    }
 
     setProgress({
       stage: 'complete',
-      message: 'Research complete!',
+      message,
       prospectsFound,
+      totalExtracted: extraData?.totalExtracted,
+      duplicatesSkipped: extraData?.duplicatesSkipped,
+      urlsFound: extraData?.urlsFound,
     })
 
     // Capture prospect IDs if provided, otherwise fetch recent prospects
