@@ -518,6 +518,12 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
     const newProspects: Prospect[] = []
     let duplicateCount = 0
 
+    // Log what we're about to dedupe
+    logger.info({ jobId, count: batchProspects.length }, 'Starting deduplication check')
+    for (const p of batchProspects) {
+      logger.info(`Dedup input: "${p.full_name}" at "${p.company || 'no company'}" (email: ${p.email || 'none'}, linkedin: ${p.linkedin_url || 'none'})`)
+    }
+
     for (const prospect of batchProspects) {
       const dedupeResult = await deduplicationService.checkDuplicate({
         full_name: prospect.full_name,
@@ -528,13 +534,10 @@ IMPORTANT: Only extract REAL people actually mentioned in the content. Do not ma
 
       if (dedupeResult.isNew) {
         newProspects.push(prospect)
+        logger.info(`Dedup result: "${prospect.full_name}" is NEW`)
       } else {
         duplicateCount++
-        logger.debug({
-          name: prospect.full_name,
-          matchType: dedupeResult.bestMatch?.matchType,
-          score: dedupeResult.bestMatch?.score,
-        }, 'Skipping duplicate prospect')
+        logger.info(`Dedup result: "${prospect.full_name}" is DUPLICATE (${dedupeResult.bestMatch?.matchType}, score: ${dedupeResult.bestMatch?.score}, matched: "${dedupeResult.bestMatch?.existingName || 'unknown'}")`)
       }
     }
 
